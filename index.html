@@ -2,7 +2,9 @@
 <html>
 <head>
   <base target="_top">
+  <meta charset="UTF-8">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <title>會議現場簽到系統</title>
   <style>
     body { background-color: #f8f9fa; padding: 20px; font-family: "Microsoft JhengHei", sans-serif; }
     .container { max-width: 500px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -10,7 +12,6 @@
     .list-group-item { cursor: pointer; }
     .list-group-item:hover { background-color: #e9ecef; }
     
-    /* 簽名點擊區樣式 */
     .signature-trigger-box {
       border: 2px dashed #0d6efd;
       border-radius: 8px;
@@ -24,84 +25,23 @@
       cursor: pointer;
       overflow: hidden;
     }
-    #preview-img {
-      max-height: 90%;
-      max-width: 90%;
-      object-fit: contain;
-    }
-
-    /* 全螢幕簽名遮罩層 */
+    #preview-img { max-height: 90%; max-width: 90%; object-fit: contain; }
     #fullscreen-overlay {
-      position: fixed;
-      top: 0; left: 0; 
-      width: 100vw; height: 100vh;
-      background: #111111;
-      z-index: 9999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #111111; z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden;
     }
-    
-    /* 橫屏容器：改為橫向排列 (row) */
-    .rotated-container {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: row; /* 關鍵：讓控制欄和畫布左右並排 */
-      box-sizing: border-box;
-      padding: 10px;
-      gap: 12px;
-    }
-    
-    /* 簽名畫布左側的資訊與按鈕控制區 */
-    .canvas-sidebar {
-      width: 130px; /* 固定左側控制欄寬度 */
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      color: white;
-    }
-    
-    #canvas {
-      flex: 1; /* 畫布自動填滿右側所有剩餘空間 */
-      background: #ffffff;
-      border-radius: 8px;
-      touch-action: none;
-      height: 100%;
-    }
-    
-    /* 側邊欄按鈕垂直排列 */
-    .canvas-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    /* 直式鎖定提示保持不變 */
+    .rotated-container { width: 100%; height: 100%; display: flex; flex-direction: row; box-sizing: border-box; padding: 10px; gap: 12px; }
+    .canvas-sidebar { width: 130px; display: flex; flex-direction: column; justify-content: space-between; color: white; }
+    #canvas { flex: 1; background: #ffffff; border-radius: 8px; touch-action: none; height: 100%; }
+    .canvas-controls { display: flex; flex-direction: column; gap: 8px; }
     #orientation-warning {
-      display: none;
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: #111;
-      color: white;
-      z-index: 10000;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 20px;
+      display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: #111; color: white; z-index: 10000; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;
     }
-    .phone-icon {
-      font-size: 50px;
-      animation: rotatePhone 2s infinite ease-in-out;
-      margin-bottom: 15px;
-    }
-    @keyframes rotatePhone {
-      0% { transform: rotate(0deg); }
-      50% { transform: rotate(-90deg); }
-      100% { transform: rotate(-90deg); }
-    }
+    .phone-icon { font-size: 50px; animation: rotatePhone 2s infinite ease-in-out; margin-bottom: 15px; }
+    @keyframes rotatePhone { 0% { transform: rotate(0deg); } 50% { transform: rotate(-90deg); } 100% { transform: rotate(-90deg); } }
+    #print-table-body tr { height: 70px; }
+    #print-table-body td { height: 70px; padding: 2px 8px !important; }
   </style>
 </head>
 <body>
@@ -139,6 +79,7 @@
   <div id="step-signature" class="hidden">
     <button class="btn btn-sm btn-link p-0 mb-3" onclick="goBackToMode()">&lt; 返回</button>
     <h5 id="sign-title" class="mb-3">請點擊下方區塊進行簽名：</h5>
+    <div id="already-signed-hint" class="alert alert-warning py-2 small hidden">⚠️ 您之前已簽到過，再次送出將會覆蓋舊簽名。</div>
     
     <div class="signature-trigger-box mb-4" onclick="openFullscreenSign()">
       <span id="trigger-text">✍️ 點擊此處 開啟全螢幕橫式簽名</span>
@@ -152,12 +93,11 @@
     <h2 class="text-success">🎉</h2>
     <h4 class="text-success mb-3">簽到成功！</h4>
     <p>感謝您的參與，請步入會場。</p>
-    <button class="btn btn-primary mt-3" onclick="resetApp()">回首頁</button>
+    <button class="btn btn-primary mt-3" onclick="location.reload()">回首頁</button>
   </div>
 </div>
 
 <div id="fullscreen-overlay" class="hidden">
-  
   <div id="orientation-warning">
     <div class="phone-icon">📱</div>
     <h4>請將手機「橫著拿」</h4>
@@ -166,22 +106,18 @@
   </div>
 
   <div class="rotated-container">
-    
     <div class="canvas-sidebar">
       <div>
         <span id="pop-title" class="fw-bold text-primary" style="font-size: 14px;">請簽名</span>
         <hr class="my-2" style="border-color: #444;">
       </div>
-      
       <div class="canvas-controls">
         <button class="btn btn-warning btn-sm w-100 py-2" onclick="clearCanvas()">↩ 重簽</button>
         <button class="btn btn-primary btn-sm w-100 py-2 fw-bold" onclick="closeFullscreenSign(true)">✓ 完成</button>
         <button class="btn btn-outline-light btn-sm w-100 mt-2" onclick="closeFullscreenSign(false)" style="font-size: 11px;">✕ 離開</button>
       </div>
     </div>
-    
     <canvas id="canvas"></canvas>
-    
   </div>
 </div>
 
@@ -193,9 +129,7 @@
   
   <div class="text-center mb-4">
     <h2 id="print-meeting-name" class="fw-bold mb-3">會議簽到成果表</h2>
-    <h2 class="fw-bold mb-3">簽到冊</h2>
     <div class="d-flex flex-column align-items-center text-start mx-auto mb-4" style="max-width: 600px; font-size: 16px; line-height: 1.8;">
-      
       <div class="w-100"><strong>會議時間：</strong><span id="print-meeting-time"></span></div>
       <div class="w-100"><strong>會議地點：</strong><span id="print-meeting-location"></span></div>
       <div class="w-100"><strong>會議主席：</strong><span id="print-meeting-chair"></span></div>
@@ -206,10 +140,10 @@
     <thead class="table-light">
       <tr>
         <th style="width: 10%">序號</th>
-        <th style="width: 20%">單位</th>
-        <th style="width: 20%">姓名</th>
-        <th style="width: 30%">簽名</th>
-        <th style="width: 20%">備註</th>
+        <th style="width: 25%">單位</th>
+        <th style="width: 25%">姓名</th>
+        <th style="width: 25%">簽名</th>
+        <th style="width: 15%">備註</th>
       </tr>
     </thead>
     <tbody id="print-table-body"></tbody>
@@ -217,16 +151,31 @@
 </div>
 
 <script>
+  // ⚠️ 關鍵設定：請在下方雙引號內填入您在 GAS 點擊「新部署」產生的 URL！
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwyrGAKwG0ApZ4GKBAjG4XtnjhqQnEgHohsZHS4jiRK-05Vw-l8gXIhEx-gQ-mpIzp6ZA/exec";
+
   let fullList = [];
+  let serverRecords = [];
+  let serverAttendeeList = [];
   let selectedUser = { unit: '', name: '', isNew: false };
   let currentMode = '';
   let hasSigned = false; 
 
-  // 網頁進來時只撈取名單，不提前初始化 Canvas
   window.onload = function() {
-    google.script.run.withSuccessHandler(function(list) {
-      fullList = list;
-    }).getAttendeeList();
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: "getPrintData" })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if(res.status === "success") {
+        serverRecords = res.serverRecords;
+        serverAttendeeList = res.serverAttendeeList;
+        for (let i = 1; i < serverAttendeeList.length; i++) {
+          fullList.push({ unit: serverAttendeeList[i][0], name: serverAttendeeList[i][1] });
+        }
+      }
+    }).catch(err => console.error("初始化資料失敗", err));
   };
 
   function switchMode(mode) {
@@ -247,6 +196,14 @@
     document.getElementById('step-mode').classList.remove('hidden');
   }
 
+  function checkAlreadySigned(unit, name) {
+    if (!serverRecords) return false;
+    for (let i = 1; i < serverRecords.length; i++) {
+      if (serverRecords[i][1] === unit && serverRecords[i][2] === name) return true;
+    }
+    return false;
+  }
+
   function filterList() {
     const keyword = document.getElementById('search-input').value.toLowerCase();
     const ul = document.getElementById('user-list');
@@ -256,8 +213,15 @@
     const filtered = fullList.filter(u => u.name.toLowerCase().includes(keyword) || u.unit.toLowerCase().includes(keyword));
     filtered.forEach(u => {
       const li = document.createElement('li');
-      li.className = 'list-group-item';
-      li.innerText = `[${u.unit}] ${u.name}`;
+      li.className = 'list-group-item d-flex justify-content-between align-items-center';
+      
+      const isSignedToday = checkAlreadySigned(u.unit, u.name);
+      if (isSignedToday) {
+        li.innerHTML = `<span>[${u.unit}] ${u.name}</span> <span class="badge bg-success">已簽過</span>`;
+      } else {
+        li.innerText = `[${u.unit}] ${u.name}`;
+      }
+      
       li.onclick = () => selectUser(u.unit, u.name, false);
       ul.appendChild(li);
     });
@@ -277,7 +241,13 @@
     document.getElementById('step-signature').classList.remove('hidden');
     document.getElementById('sign-title').innerText = `請【${name}】進行簽名：`;
     
-    // 重設簽名狀態
+    const hintBox = document.getElementById('already-signed-hint');
+    if (!isNew && checkAlreadySigned(unit, name)) {
+      hintBox.classList.remove('hidden');
+    } else {
+      hintBox.classList.add('hidden');
+    }
+    
     hasSigned = false;
     document.getElementById('submit-btn').disabled = true;
     document.getElementById('trigger-text').classList.remove('hidden');
@@ -294,34 +264,25 @@
     }
   }
 
-  // === 監聽手機轉向事件 ===
   window.addEventListener("resize", checkOrientation);
   window.addEventListener("orientationchange", checkOrientation);
 
   function checkOrientation() {
     const overlay = document.getElementById('fullscreen-overlay');
-    // 如果目前全螢幕遮罩是開啟的，就檢查寬高比
     if (!overlay.classList.contains('hidden')) {
       const warning = document.getElementById('orientation-warning');
       if (window.innerWidth < window.innerHeight) {
-        // 寬比高小 ➔ 直式狀態：顯示提示，擋住畫布
         warning.style.display = 'flex';
       } else {
-        // 寬比高大 ➔ 橫式狀態：隱藏提示，秀出畫布並重新校正畫布大小
         warning.style.display = 'none';
-        setTimeout(function() {
-          initCanvas();
-        }, 100);
+        setTimeout(function() { initCanvas(); }, 100);
       }
     }
   }
 
-  // === 開啟全螢幕簽名 ===
   function openFullscreenSign() {
     document.getElementById('fullscreen-overlay').classList.remove('hidden');
     document.getElementById('pop-title').innerText = `請【${selectedUser.name}】在下方正楷簽名：`;
-    
-    // 觸發一次轉向檢查
     checkOrientation();
   }
 
@@ -331,33 +292,26 @@
       document.getElementById('preview-img').src = dataUrl;
       document.getElementById('preview-img').classList.remove('hidden');
       document.getElementById('trigger-text').classList.add('hidden');
-      document.getElementById('submit-btn').disabled = false; 
+      document.getElementById('submit-btn').disabled = false;
     }
     document.getElementById('fullscreen-overlay').classList.add('hidden');
   }
 
-  // === 畫布核心邏輯（回歸標準原生 XY 座標，精確度 100%） ===
   let canvas, ctx, isDrawing = false;
-  
   function initCanvas() {
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
-    
-    // 直接動態抓取橫置後的絕對寬高
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width;
     canvas.height = rect.height;
-
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4; 
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // 標準標準標準坐標軸（不再需要反向矩陣換算）
     function getStandardXY(e) {
       const r = canvas.getBoundingClientRect();
       let clientX, clientY;
-      
       if (e.touches && e.touches.length > 0) {
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
@@ -365,14 +319,12 @@
         clientX = e.clientX;
         clientY = e.clientY;
       }
-      
       return {
         x: (clientX - r.left) * (canvas.width / r.width),
         y: (clientY - r.top) * (canvas.height / r.height)
       };
     }
 
-    // 滑鼠事件
     canvas.addEventListener('mousedown', e => { 
       isDrawing = true; 
       ctx.beginPath();
@@ -390,7 +342,6 @@
     canvas.addEventListener('mouseup', () => isDrawing = false);
     canvas.addEventListener('mouseleave', () => isDrawing = false);
     
-    // 觸控事件
     canvas.addEventListener('touchstart', e => { 
       isDrawing = true; 
       ctx.beginPath();
@@ -398,7 +349,6 @@
       ctx.moveTo(pos.x, pos.y); 
       e.preventDefault(); 
     }, { passive: false });
-
     canvas.addEventListener('touchmove', e => { 
       if (!isDrawing) return;
       hasSigned = true;
@@ -407,7 +357,6 @@
       ctx.stroke();
       e.preventDefault(); 
     }, { passive: false });
-
     canvas.addEventListener('touchend', e => { isDrawing = false; e.preventDefault(); }, { passive: false });
   }
 
@@ -420,63 +369,131 @@
     }
   }
 
-
-
   function submitData() {
     const btn = document.getElementById('submit-btn');
     btn.disabled = true;
     btn.innerText = '傳送中...';
-    
     const signatureData = document.getElementById('preview-img').src;
     
-    google.script.run.withSuccessHandler(function(res) {
-      document.getElementById('step-signature').classList.add('hidden');
-      document.getElementById('step-success').classList.remove('hidden');
-    }).submitSignIn(selectedUser.unit, selectedUser.name, signatureData, selectedUser.isNew);
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: "submitSignIn",
+        unit: selectedUser.unit,
+        name: selectedUser.name,
+        signatureData: signatureData,
+        isNew: selectedUser.isNew
+      })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if (res.status === "success") {
+        document.getElementById('step-signature').classList.add('hidden');
+        document.getElementById('step-success').classList.remove('hidden');
+      } else {
+        alert("簽到失敗：" + res.message);
+        btn.disabled = false;
+        btn.innerText = '確認送出簽到';
+      }
+    }).catch(err => {
+      alert("連線錯誤，請檢查網路。");
+      btn.disabled = false;
+      btn.innerText = '確認送出簽到';
+    });
   }
 
-  function resetApp() {
-    document.getElementById('step-success').classList.add('hidden');
-    document.getElementById('step-mode').classList.remove('hidden');
-    document.getElementById('search-input').value = '';
-    document.getElementById('new-unit').value = '';
-    document.getElementById('new-name').value = '';
-    document.getElementById('user-list').innerHTML = '';
-    google.script.run.withSuccessHandler(list => fullList = list).getAttendeeList();
-  }
-
-  // 僅保留唯一的數據渲染函數（加入會議基本資料帶入）
   function loadPrintData() {
     const tbody = document.getElementById('print-table-body');
     tbody.innerHTML = '';
     
-    // 1. 讀取 GAS 伺服器傳過來的會議基本資料並填入網頁
-    const info = <?!= JSON.stringify(serverInfo) ?>;
-    if (info) {
-      document.getElementById('print-meeting-name').innerText = info.name ? info.name  : "會議簽到成果表";
-      document.getElementById('print-meeting-time').innerText = info.time || '—';
-      document.getElementById('print-meeting-location').innerText = info.location || '—';
-      document.getElementById('print-meeting-chair').innerText = info.chair || '—';
-    }
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: "getPrintData" })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if (res.status !== "success") return;
+      
+      const info = res.serverInfo;
+      if (info) {
+        document.getElementById('print-meeting-name').innerText = info.name ? info.name : "會議簽到成果表";
+        document.getElementById('print-meeting-time').innerText = info.time || '—';
+        document.getElementById('print-meeting-location').innerText = info.location || '—';
+        document.getElementById('print-meeting-chair').innerText = info.chair || '—';
+      }
 
-    // 2. 讀取簽到紀錄
-    const records = <?!= JSON.stringify(serverRecords) ?>;
-    if (!records || records.length <= 1) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">目前尚無簽到紀錄</td></tr>';
-      return;
-    }
-    for (let i = 1; i < records.length; i++) {
-      const rowData = records[i];
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${i}</td>
-        <td>${rowData[1]}</td>
-        <td>${rowData[2]}</td>
-        <td><img src="${rowData[3]}" style="height:55px; max-width:200px; object-fit:contain;"></td>
-        <td>${rowData[4] || ''}</td>
-      `;
-      tbody.appendChild(tr);
-    }
+      const officialAttendees = res.serverAttendeeList;
+      const actualRecords = res.serverRecords;
+      
+      let globalIndex = 1;
+      let recordMap = {};
+      
+      if (actualRecords) {
+        for (let r = 1; r < actualRecords.length; r++) {
+          let key = actualRecords[r][1] + "_" + actualRecords[r][2];
+          recordMap[key] = { img: actualRecords[r][3], note: actualRecords[r][4] };
+        }
+      }
+
+      if (officialAttendees && officialAttendees.length > 1) {
+        for (let i = 1; i < officialAttendees.length; i++) {
+          const uUnit = officialAttendees[i][0];
+          const uName = officialAttendees[i][1];
+          const key = uUnit + "_" + uName;
+          
+          let signImgHtml = '';
+          let noteText = '';
+          
+          if (recordMap[key]) {
+            signImgHtml = `<img src="${recordMap[key].img}" style="height:100%; max-height:65px; max-width:200px; object-fit:contain; display:block; margin:0 auto;">`;
+            noteText = recordMap[key].note === "現場補登" ? "現場補登" : "";
+          }
+          
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${globalIndex++}</td>
+            <td>${uUnit}</td>
+            <td>${uName}</td>
+            <td>${signImgHtml}</td>
+            <td>${noteText}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      if (actualRecords) {
+        for (let r = 1; r < actualRecords.length; r++) {
+          const rUnit = actualRecords[r][1];
+          const rName = actualRecords[r][2];
+          const rSign = actualRecords[r][3];
+          const rNote = actualRecords[r][4];
+          
+          let isOfficial = false;
+          if (officialAttendees) {
+            for (let i = 1; i < officialAttendees.length; i++) {
+              if (officialAttendees[i][0] === rUnit && officialAttendees[i][1] === rName) {
+                isOfficial = true;
+                break;
+              }
+            }
+          }
+          
+          if (!isOfficial && rNote === "現場補登") {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="table-warning-light">${globalIndex++}</td>
+              <td>${rUnit}</td>
+              <td>${rName}</td>
+              <td><img src="${rSign}" style="height:100%; max-height:65px; max-width:200px; object-fit:contain; display:block; margin:0 auto;"></td>
+              <td class="text-danger fw-bold">${rNote}</td>
+            `;
+            tbody.appendChild(tr);
+          }
+        }
+      }
+    }).catch(err => {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">讀取後台失敗</td></tr>';
+    });
   }
 
   function checkAdminPassword() {
