@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <style>
+    body { background-color: #f8f9fa; padding: 20px; font-family: "Microsoft JhengHei", sans-serif; }
+    .container { max-width: 500px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .hidden { display: none !important; }
+    .list-group-item { cursor: pointer; }
+    .list-group-item:hover { background-color: #e9ecef; }
+    
+    /* 簽名點擊區樣式 */
+    .signature-trigger-box {
+      border: 2px dashed #0d6efd;
+      border-radius: 8px;
+      background: #f1f7ff;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0d6efd;
+      font-weight: bold;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    #preview-img {
+      max-height: 90%;
+      max-width: 90%;
+      object-fit: contain;
+    }
+
+    /* 全螢幕簽名遮罩層 */
+    #fullscreen-overlay {
+      position: fixed;
+      top: 0; left: 0; 
+      width: 100vw; height: 100vh;
+      background: #111111;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    
+    /* 橫屏容器：改為橫向排列 (row) */
+    .rotated-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: row; /* 關鍵：讓控制欄和畫布左右並排 */
+      box-sizing: border-box;
+      padding: 10px;
+      gap: 12px;
+    }
+    
+    /* 簽名畫布左側的資訊與按鈕控制區 */
+    .canvas-sidebar {
+      width: 130px; /* 固定左側控制欄寬度 */
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: white;
+    }
+    
+    #canvas {
+      flex: 1; /* 畫布自動填滿右側所有剩餘空間 */
+      background: #ffffff;
+      border-radius: 8px;
+      touch-action: none;
+      height: 100%;
+    }
+    
+    /* 側邊欄按鈕垂直排列 */
+    .canvas-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* 直式鎖定提示保持不變 */
+    #orientation-warning {
+      display: none;
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #111;
+      color: white;
+      z-index: 10000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+    .phone-icon {
+      font-size: 50px;
+      animation: rotatePhone 2s infinite ease-in-out;
+      margin-bottom: 15px;
+    }
+    @keyframes rotatePhone {
+      0% { transform: rotate(0deg); }
+      50% { transform: rotate(-90deg); }
+      100% { transform: rotate(-90deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container mt-3" id="mainApp">
+  <h3 class="text-center mb-4 text-primary fw-bold">會議現場簽到系統</h3>
+  
+  <div id="step-mode" class="d-grid gap-2">
+    <button class="btn btn-outline-primary btn-lg" onclick="switchMode('search')">🔍 名單內簽到</button>
+    <button class="btn btn-outline-secondary btn-lg" onclick="switchMode('new')">➕ 現場臨時加簽</button>
+    <button class="btn btn-dark mt-4" onclick="checkAdminPassword()">🖨️ 主辦方輸出簽到表 (需密碼)</button>
+  </div>
+
+  <div id="mode-search" class="hidden">
+    <button class="btn btn-sm btn-link p-0 mb-3" onclick="goBack()">&lt; 返回</button>
+    <h5>請輸入姓名或單位搜尋：</h5>
+    <input type="text" id="search-input" class="form-control mb-3" placeholder="關鍵字..." oninput="filterList()">
+    <ul id="user-list" class="list-group overflow-auto" style="max-height: 250px;"></ul>
+  </div>
+
+  <div id="mode-new" class="hidden">
+    <button class="btn btn-sm btn-link p-0 mb-3" onclick="goBack()">&lt; 返回</button>
+    <h5>請輸入您的資料：</h5>
+    <div class="mb-3">
+      <label class="form-label">服務單位</label>
+      <input type="text" id="new-unit" class="form-control" placeholder="例如：XX有限公司">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">姓名</label>
+      <input type="text" id="new-name" class="form-control" placeholder="請輸入姓名">
+    </div>
+    <button class="btn btn-primary w-100" onclick="confirmNewUser()">下一頁：手寫簽名</button>
+  </div>
+
+  <div id="step-signature" class="hidden">
+    <button class="btn btn-sm btn-link p-0 mb-3" onclick="goBackToMode()">&lt; 返回</button>
+    <h5 id="sign-title" class="mb-3">請點擊下方區塊進行簽名：</h5>
+    
+    <div class="signature-trigger-box mb-4" onclick="openFullscreenSign()">
+      <span id="trigger-text">✍️ 點擊此處 開啟全螢幕橫式簽名</span>
+      <img id="preview-img" class="hidden">
+    </div>
+    
+    <button class="btn btn-success w-100 btn-lg" id="submit-btn" onclick="submitData()" disabled>確認送出簽到</button>
+  </div>
+  
+  <div id="step-success" class="hidden text-center py-4">
+    <h2 class="text-success">🎉</h2>
+    <h4 class="text-success mb-3">簽到成功！</h4>
+    <p>感謝您的參與，請步入會場。</p>
+    <button class="btn btn-primary mt-3" onclick="resetApp()">回首頁</button>
+  </div>
+</div>
+
+<div id="fullscreen-overlay" class="hidden">
+  
+  <div id="orientation-warning">
+    <div class="phone-icon">📱</div>
+    <h4>請將手機「橫著拿」</h4>
+    <p class="text-muted small">橫向螢幕才能提供完整的簽名空間</p>
+    <button class="btn btn-sm btn-outline-light mt-3" onclick="closeFullscreenSign(false)">✕ 離開簽名</button>
+  </div>
+
+  <div class="rotated-container">
+    
+    <div class="canvas-sidebar">
+      <div>
+        <span id="pop-title" class="fw-bold text-primary" style="font-size: 14px;">請簽名</span>
+        <hr class="my-2" style="border-color: #444;">
+      </div>
+      
+      <div class="canvas-controls">
+        <button class="btn btn-warning btn-sm w-100 py-2" onclick="clearCanvas()">↩ 重簽</button>
+        <button class="btn btn-primary btn-sm w-100 py-2 fw-bold" onclick="closeFullscreenSign(true)">✓ 完成</button>
+        <button class="btn btn-outline-light btn-sm w-100 mt-2" onclick="closeFullscreenSign(false)" style="font-size: 11px;">✕ 離開</button>
+      </div>
+    </div>
+    
+    <canvas id="canvas"></canvas>
+    
+  </div>
+</div>
+
+<div id="mode-print" class="container-fluid hidden bg-white p-4">
+  <div class="d-print-none mb-4">
+    <button class="btn btn-danger" onclick="location.reload()">離開列印頁面</button>
+    <button class="btn btn-success ms-2" onclick="window.print()">確認列印 / 另存 PDF</button>
+  </div>
+  
+  <div class="text-center mb-4">
+    <h2 id="print-meeting-name" class="fw-bold mb-3">會議簽到成果表</h2>
+    <h2 class="fw-bold mb-3">簽到冊</h2>
+    <div class="d-flex flex-column align-items-center text-start mx-auto mb-4" style="max-width: 600px; font-size: 16px; line-height: 1.8;">
+      
+      <div class="w-100"><strong>會議時間：</strong><span id="print-meeting-time"></span></div>
+      <div class="w-100"><strong>會議地點：</strong><span id="print-meeting-location"></span></div>
+      <div class="w-100"><strong>會議主席：</strong><span id="print-meeting-chair"></span></div>
+    </div>
+  </div>
+  
+  <table class="table table-bordered align-middle mx-auto" style="max-width: 900px;">
+    <thead class="table-light">
+      <tr>
+        <th style="width: 10%">序號</th>
+        <th style="width: 20%">單位</th>
+        <th style="width: 20%">姓名</th>
+        <th style="width: 30%">簽名</th>
+        <th style="width: 20%">備註</th>
+      </tr>
+    </thead>
+    <tbody id="print-table-body"></tbody>
+  </table>
+</div>
+
+<script>
+  let fullList = [];
+  let selectedUser = { unit: '', name: '', isNew: false };
+  let currentMode = '';
+  let hasSigned = false; 
+
+  // 網頁進來時只撈取名單，不提前初始化 Canvas
+  window.onload = function() {
+    google.script.run.withSuccessHandler(function(list) {
+      fullList = list;
+    }).getAttendeeList();
+  };
+
+  function switchMode(mode) {
+    currentMode = mode;
+    document.getElementById('step-mode').classList.add('hidden');
+    if(mode === 'print') {
+      document.getElementById('mainApp').classList.add('hidden');
+      document.getElementById('mode-print').classList.remove('hidden');
+      loadPrintData();
+    } else {
+      document.getElementById('mode-' + mode).classList.remove('hidden');
+    }
+  }
+
+  function goBack() {
+    document.getElementById('mode-search').classList.add('hidden');
+    document.getElementById('mode-new').classList.add('hidden');
+    document.getElementById('step-mode').classList.remove('hidden');
+  }
+
+  function filterList() {
+    const keyword = document.getElementById('search-input').value.toLowerCase();
+    const ul = document.getElementById('user-list');
+    ul.innerHTML = '';
+    if(!keyword) return;
+
+    const filtered = fullList.filter(u => u.name.toLowerCase().includes(keyword) || u.unit.toLowerCase().includes(keyword));
+    filtered.forEach(u => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item';
+      li.innerText = `[${u.unit}] ${u.name}`;
+      li.onclick = () => selectUser(u.unit, u.name, false);
+      ul.appendChild(li);
+    });
+  }
+
+  function confirmNewUser() {
+    const unit = document.getElementById('new-unit').value.trim();
+    const name = document.getElementById('new-name').value.trim();
+    if(!unit || !name) { alert('請填寫單位與姓名！'); return; }
+    selectUser(unit, name, true);
+  }
+
+  function selectUser(unit, name, isNew) {
+    selectedUser = { unit, name, isNew };
+    document.getElementById('mode-search').classList.add('hidden');
+    document.getElementById('mode-new').classList.add('hidden');
+    document.getElementById('step-signature').classList.remove('hidden');
+    document.getElementById('sign-title').innerText = `請【${name}】進行簽名：`;
+    
+    // 重設簽名狀態
+    hasSigned = false;
+    document.getElementById('submit-btn').disabled = true;
+    document.getElementById('trigger-text').classList.remove('hidden');
+    document.getElementById('preview-img').classList.add('hidden');
+    document.getElementById('preview-img').src = '';
+  }
+
+  function goBackToMode() {
+    document.getElementById('step-signature').classList.add('hidden');
+    if(selectedUser.isNew) {
+      document.getElementById('mode-new').classList.remove('hidden');
+    } else {
+      document.getElementById('mode-search').classList.remove('hidden');
+    }
+  }
+
+  // === 監聽手機轉向事件 ===
+  window.addEventListener("resize", checkOrientation);
+  window.addEventListener("orientationchange", checkOrientation);
+
+  function checkOrientation() {
+    const overlay = document.getElementById('fullscreen-overlay');
+    // 如果目前全螢幕遮罩是開啟的，就檢查寬高比
+    if (!overlay.classList.contains('hidden')) {
+      const warning = document.getElementById('orientation-warning');
+      if (window.innerWidth < window.innerHeight) {
+        // 寬比高小 ➔ 直式狀態：顯示提示，擋住畫布
+        warning.style.display = 'flex';
+      } else {
+        // 寬比高大 ➔ 橫式狀態：隱藏提示，秀出畫布並重新校正畫布大小
+        warning.style.display = 'none';
+        setTimeout(function() {
+          initCanvas();
+        }, 100);
+      }
+    }
+  }
+
+  // === 開啟全螢幕簽名 ===
+  function openFullscreenSign() {
+    document.getElementById('fullscreen-overlay').classList.remove('hidden');
+    document.getElementById('pop-title').innerText = `請【${selectedUser.name}】在下方正楷簽名：`;
+    
+    // 觸發一次轉向檢查
+    checkOrientation();
+  }
+
+  function closeFullscreenSign(saveRecords) {
+    if (saveRecords && hasSigned) {
+      const dataUrl = canvas.toDataURL();
+      document.getElementById('preview-img').src = dataUrl;
+      document.getElementById('preview-img').classList.remove('hidden');
+      document.getElementById('trigger-text').classList.add('hidden');
+      document.getElementById('submit-btn').disabled = false; 
+    }
+    document.getElementById('fullscreen-overlay').classList.add('hidden');
+  }
+
+  // === 畫布核心邏輯（回歸標準原生 XY 座標，精確度 100%） ===
+  let canvas, ctx, isDrawing = false;
+  
+  function initCanvas() {
+    canvas = document.getElementById('canvas');
+    ctx = canvas.getContext('2d');
+    
+    // 直接動態抓取橫置後的絕對寬高
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4; 
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 標準標準標準坐標軸（不再需要反向矩陣換算）
+    function getStandardXY(e) {
+      const r = canvas.getBoundingClientRect();
+      let clientX, clientY;
+      
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      
+      return {
+        x: (clientX - r.left) * (canvas.width / r.width),
+        y: (clientY - r.top) * (canvas.height / r.height)
+      };
+    }
+
+    // 滑鼠事件
+    canvas.addEventListener('mousedown', e => { 
+      isDrawing = true; 
+      ctx.beginPath();
+      const pos = getStandardXY(e);
+      ctx.moveTo(pos.x, pos.y); 
+    });
+    canvas.addEventListener('mousemove', e => { 
+      if (isDrawing) {
+        hasSigned = true;
+        const pos = getStandardXY(e);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+      }
+    });
+    canvas.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mouseleave', () => isDrawing = false);
+    
+    // 觸控事件
+    canvas.addEventListener('touchstart', e => { 
+      isDrawing = true; 
+      ctx.beginPath();
+      const pos = getStandardXY(e);
+      ctx.moveTo(pos.x, pos.y); 
+      e.preventDefault(); 
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', e => { 
+      if (!isDrawing) return;
+      hasSigned = true;
+      const pos = getStandardXY(e);
+      ctx.lineTo(pos.x, pos.y); 
+      ctx.stroke();
+      e.preventDefault(); 
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', e => { isDrawing = false; e.preventDefault(); }, { passive: false });
+  }
+
+  function clearCanvas() {
+    if (canvas && ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      isDrawing = false;
+      hasSigned = false;
+    }
+  }
+
+
+
+  function submitData() {
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerText = '傳送中...';
+    
+    const signatureData = document.getElementById('preview-img').src;
+    
+    google.script.run.withSuccessHandler(function(res) {
+      document.getElementById('step-signature').classList.add('hidden');
+      document.getElementById('step-success').classList.remove('hidden');
+    }).submitSignIn(selectedUser.unit, selectedUser.name, signatureData, selectedUser.isNew);
+  }
+
+  function resetApp() {
+    document.getElementById('step-success').classList.add('hidden');
+    document.getElementById('step-mode').classList.remove('hidden');
+    document.getElementById('search-input').value = '';
+    document.getElementById('new-unit').value = '';
+    document.getElementById('new-name').value = '';
+    document.getElementById('user-list').innerHTML = '';
+    google.script.run.withSuccessHandler(list => fullList = list).getAttendeeList();
+  }
+
+  // 僅保留唯一的數據渲染函數（加入會議基本資料帶入）
+  function loadPrintData() {
+    const tbody = document.getElementById('print-table-body');
+    tbody.innerHTML = '';
+    
+    // 1. 讀取 GAS 伺服器傳過來的會議基本資料並填入網頁
+    const info = <?!= JSON.stringify(serverInfo) ?>;
+    if (info) {
+      document.getElementById('print-meeting-name').innerText = info.name ? info.name  : "會議簽到成果表";
+      document.getElementById('print-meeting-time').innerText = info.time || '—';
+      document.getElementById('print-meeting-location').innerText = info.location || '—';
+      document.getElementById('print-meeting-chair').innerText = info.chair || '—';
+    }
+
+    // 2. 讀取簽到紀錄
+    const records = <?!= JSON.stringify(serverRecords) ?>;
+    if (!records || records.length <= 1) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">目前尚無簽到紀錄</td></tr>';
+      return;
+    }
+    for (let i = 1; i < records.length; i++) {
+      const rowData = records[i];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td>${rowData[1]}</td>
+        <td>${rowData[2]}</td>
+        <td><img src="${rowData[3]}" style="height:55px; max-width:200px; object-fit:contain;"></td>
+        <td>${rowData[4] || ''}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function checkAdminPassword() {
+    const adminPassword = "1234";
+    const userInput = prompt("請輸入主辦方管理密碼以安全輸出簽到表：");
+    if (userInput === null) return;
+    if (userInput === adminPassword) {
+      switchMode('print');
+    } else {
+      alert("密碼錯誤！您沒有權限存取此資料。");
+    }
+  }
+</script>
+</body>
+</html>
