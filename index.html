@@ -135,6 +135,8 @@
   <div class="d-print-none mb-4">
     <button class="btn btn-danger" onclick="document.getElementById('mode-print').classList.add('hidden'); document.getElementById('mainApp').classList.remove('hidden'); document.getElementById('step-mode').classList.remove('hidden');">離開列印頁面</button>
     <button class="btn btn-success ms-2" onclick="window.print()">確認列印 / 另存 PDF</button>
+    
+    <button class="btn btn-primary ms-2" onclick="document.getElementById('print-table-body').innerHTML = '<tr><td colspan=\'5\' class=\'text-center text-muted py-4\'>正在重新同步後端資料...</td></tr>'; fetchDataWithRetry(3);">🔄 重新整理資料</button>
   </div>
   
   <div class="text-center mb-4">
