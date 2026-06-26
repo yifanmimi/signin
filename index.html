@@ -480,15 +480,17 @@
   }
 
   function resetApp() {
+    // 隱藏成功畫面，切換回首頁選單
     document.getElementById('step-success').classList.add('hidden');
     document.getElementById('step-mode').classList.remove('hidden');
     
+    // 清空輸入框
     document.getElementById('search-input').value = '';
     document.getElementById('new-unit').value = '';
     document.getElementById('new-name').value = '';
     document.getElementById('user-list').innerHTML = '';
     
-    fetchDataWithRetry(2); // 回首頁時自動默默在背景刷新一次
+    // 💡 核心優化：不再於背景主動 fetch，會眾回首頁時不消耗任何 Google 流量，徹底杜絕連線超時！
   }
 
   function loadPrintData() {
