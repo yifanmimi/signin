@@ -29,7 +29,7 @@
 
     #fullscreen-overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: #111111; z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden;
+      background: #111; z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden;
     }
     
     .rotated-container {
@@ -138,7 +138,7 @@
     <button class="btn btn-primary ms-2" id="manual-refresh-btn" onclick="triggerManualRefresh()">🔄 重新整理資料</button>
     
     <div class="text-success small fw-bold mt-2" id="last-update-time-box">
-      📊 目前資料狀態：正在確認初始連線...
+      📊 目前資料狀態：正在同步後端資料中...
     </div>
   </div>
   
@@ -168,7 +168,7 @@
 </div>
 
 <script>
-  // ⚠️ 關鍵設定：請在下方雙引號內填入您的 /exec 網址！
+  // 已經完整保留您原先設定好的 GAS API 網址！
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyjONRzQFJDlJMnD6WXyyPHqRFgnNsUKs6jhzazFBqtefxYIu_oGoQV52m1aMw8KHU3/exec";
 
   let fullList = [];
@@ -180,11 +180,11 @@
   let hasSigned = false; 
 
   window.onload = function() {
-    // 🔒 徹底移除所有自動定時器，改為單純且不會報錯的單次載入
+    // 🔒 徹底移除背景重試定時器，改為單純且不報錯的單次載入
     fetchDataFromServer(false); 
   };
 
-  // 🔒 徹底改造的純淨 fetch 指令，失敗時絕對不會擅自刷頁面
+  // 🔒 修正處三：重寫為純淨且支援「抓取時間顯示」的通訊函數
   function fetchDataFromServer(isManualClick) {
     const refreshBtn = document.getElementById('manual-refresh-btn');
     if (isManualClick && refreshBtn) {
@@ -213,25 +213,15 @@
           fullList.push({ unit: serverAttendeeList[i][0], name: serverAttendeeList[i][1] });
         }
         
-        // 如果此時停留在列印頁面，主動重繪表格
-        if (!document.getElementById('mode-print').classList.contains('hidden')) {
-          renderPrintTable();
-        }
-        fullList = [];
-        for (let i = 1; i < serverAttendeeList.length; i++) {
-          fullList.push({ unit: serverAttendeeList[i][0], name: serverAttendeeList[i][1] });
-        }
-        
-        // 如果此時停留在列印頁面，主動重繪表格
+        // 渲染表格
         if (!document.getElementById('mode-print').classList.contains('hidden')) {
           renderPrintTable();
         }
 
-        // ➕ 核心修正：成功抓到資料時，獲取當前手機/電腦的時間並寫入畫面
+        // ⏱️ 核心修正：撈取成功時動態填入目前的時間
         const now = new Date();
-        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false }); // 格式如 14:23:45
+        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
         document.getElementById('last-update-time-box').innerHTML = `✅ 資料同步成功！最後抓取時間：<span class="badge bg-success">${timeStr}</span>`;
-        
       } else {
         showTimeoutError();
       }
@@ -256,9 +246,9 @@
   function showTimeoutError() {
     const tbody = document.getElementById('print-table-body');
     if(tbody) {
-      // 🔒 移除文字中所有關於「重新整理網頁」的誤導暗示
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger fw-bold py-4">⚠️ 目前與後端連線超時，請點選上方「🔄 重新整理資料」按鈕重試。</td></tr>';
     }
+    document.getElementById('last-update-time-box').innerHTML = `<span class="text-danger">❌ 同步失敗，請檢查網路或重新整理資料。</span>`;
   }
 
   function switchMode(mode) {
@@ -267,7 +257,7 @@
     if(mode === 'print') {
       document.getElementById('mainApp').classList.add('hidden');
       document.getElementById('mode-print').classList.remove('hidden');
-      renderPrintTable(); // 直接呼叫本地快取渲染，絕不觸發任何多餘的自動 fetch
+      renderPrintTable(); 
     } else {
       document.getElementById('mode-' + mode).classList.remove('hidden');
     }
@@ -522,15 +512,12 @@
     document.getElementById('new-unit').value = '';
     document.getElementById('new-name').value = '';
     document.getElementById('user-list').innerHTML = '';
-    
-    // 🔒 徹底移除這裡的任何自動背景刷新，還給系統絕對的安靜與穩定
   }
 
   function renderPrintTable() {
     const tbody = document.getElementById('print-table-body');
     if (!tbody) return;
     
-    // 如果此時伺服器名單根本還沒載入完成，直接顯示提示，絕不執行半殘的空白渲染
     if (!serverAttendeeList || serverAttendeeList.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">正在等候後端初始資料同步中，請點擊上方「🔄 重新整理資料」按鈕。</td></tr>';
       return;
@@ -606,6 +593,17 @@
           tbody.appendChild(tr);
         }
       }
+    }
+  }
+
+  function checkAdminPassword() {
+    const adminPassword = "1234";
+    const userInput = prompt("請輸入主辦方管理密碼以安全輸出簽到表：");
+    if (userInput === null) return;
+    if (userInput === adminPassword) {
+      switchMode('print');
+    } else {
+      alert("密碼錯誤！您沒有權限存取此資料。");
     }
   }
 </script>
