@@ -156,12 +156,14 @@
         <th style="width: 15%">備註</th>
       </tr>
     </thead>
-    <tbody id="print-table-body"></tbody>
+    <tbody id="print-table-body">
+      <tr><td colspan="5" class="text-center text-muted py-4">正在同步後端最新簽到資料，請稍候...</td></tr>
+    </tbody>
   </table>
 </div>
 
 <script>
-  // ⚠️ 關鍵設定：請在下方雙引號內填入您剛才在 GAS 複製的 /exec 網址！
+  // ⚠️ 關鍵設定：請在下方雙引號內填入您在 GAS 複製的 /exec 網址！
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyjONRzQFJDlJMnD6WXyyPHqRFgnNsUKs6jhzazFBqtefxYIu_oGoQV52m1aMw8KHU3/exec";
 
   let fullList = [];
@@ -173,34 +175,53 @@
   let hasSigned = false; 
 
   window.onload = function() {
-    fetchDataFromBackend();
+    fetchDataWithRetry(3); // 初始啟動：失敗最多重試 3 次
   };
 
-  function fetchDataFromBackend() {
+  // 🛡️ 核心強化：自動重試網路請求函數
+  function fetchDataWithRetry(retriesLeft) {
     fetch(GAS_API_URL, {
       method: 'POST',
       body: JSON.stringify({ action: "getPrintData" })
     })
     .then(res => res.json())
     .then(res => {
-      if(res.status === "success") {
+      if(res && res.status === "success") {
         serverRecords = res.serverRecords;
         serverAttendeeList = res.serverAttendeeList;
         serverInfo = res.serverInfo;
         
-        // 渲染首頁與分頁標題 (來自後台 B6)
         if (serverInfo && serverInfo.systemName) {
           document.getElementById('main-app-title').innerText = serverInfo.systemName;
           document.title = serverInfo.systemName;
         }
         
-        // 整理名單
         fullList = [];
         for (let i = 1; i < serverAttendeeList.length; i++) {
           fullList.push({ unit: serverAttendeeList[i][0], name: serverAttendeeList[i][1] });
         }
+        
+        // 如果使用者此時處於列印頁，主動幫他把資料刷出來
+        if (!document.getElementById('mode-print').classList.contains('hidden')) {
+          renderPrintTable();
+        }
+      } else {
+        throw new Error("後端回傳格式不正確");
       }
-    }).catch(err => console.error("同步後端失敗", err));
+    })
+    .catch(err => {
+      console.warn(`資料撈取失敗，剩餘重試次數: ${retriesLeft}`, err);
+      if (retriesLeft > 0) {
+        setTimeout(() => {
+          fetchDataWithRetry(retriesLeft - 1);
+        }, 1500); // 每次失敗隔 1.5 秒再試
+      } else {
+        const tbody = document.getElementById('print-table-body');
+        if(tbody) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger fw-bold">連線超時，請重新整理網頁再試。</td></tr>';
+        }
+      }
+    });
   }
 
   function switchMode(mode) {
@@ -447,11 +468,11 @@
         document.getElementById('step-signature').classList.add('hidden');
         document.getElementById('step-success').classList.remove('hidden');
       } else {
-        alert("簽到失敗");
+        alert("簽到失敗，請重試");
         document.getElementById('submit-btn').disabled = false;
       }
     }).catch(err => {
-      alert("網路連線異常");
+      alert("網路連線異常，請稍後再試");
       document.getElementById('submit-btn').disabled = false;
     });
   }
@@ -465,15 +486,23 @@
     document.getElementById('new-name').value = '';
     document.getElementById('user-list').innerHTML = '';
     
-    fetchDataFromBackend(); // 在背景靜態更新數據
+    fetchDataWithRetry(2); // 回首頁時自動默默在背景刷新一次
   }
 
   function loadPrintData() {
+    // 檢查資料是否已經到位，有的話直接畫出來，沒有的話會等 window.onload 的 fetch 完成自動繪製
+    if (serverAttendeeList && serverAttendeeList.length > 0) {
+      renderPrintTable();
+    }
+  }
+
+  // 將表格繪製邏輯獨立拆出，方便隨時調用
+  function renderPrintTable() {
     const tbody = document.getElementById('print-table-body');
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     if (serverInfo) {
-      // 列印頁標題連動 B1
       document.getElementById('print-meeting-name').innerText = serverInfo.name ? serverInfo.name : "會議簽到成果表";
       document.getElementById('print-meeting-time').innerText = serverInfo.time || '—';
       document.getElementById('print-meeting-location').innerText = serverInfo.location || '—';
@@ -521,7 +550,9 @@
         const rUnit = serverRecords[r][1];
         const rName = serverRecords[r][2];
         const rSign = serverRecords[r][3];
-        const rNote = serverRecords[r][4];
+        const rNote = actualRecords[r] ? actualRecords[r][4] : ''; 
+        // 修正現場補登渲染容錯
+        const currentNote = rNote || serverRecords[r][4];
         
         let isOfficial = false;
         if (serverAttendeeList) {
@@ -533,14 +564,14 @@
           }
         }
         
-        if (!isOfficial && rNote === "現場補登") {
+        if (!isOfficial && currentNote === "現場補登") {
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td class="table-warning-light">${globalIndex++}</td>
             <td>${rUnit}</td>
             <td>${rName}</td>
             <td style="text-align: center;"><img src="${rSign}" style="height: auto; max-height: 60px; width: auto; max-width: 160px; object-fit: contain; display: block; margin: 0 auto;"></td>
-            <td class="text-danger fw-bold">${rNote}</td>
+            <td class="text-danger fw-bold">${currentNote}</td>
           `;
           tbody.appendChild(tr);
         }
